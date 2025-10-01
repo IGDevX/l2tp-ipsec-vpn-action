@@ -90,18 +90,6 @@ runs:
         echo "ppp_interface=ppp0" >> $GITHUB_OUTPUT
         echo "ppp_ip=$PPP_IP" >> $GITHUB_OUTPUT
 
-    - name: Run Caller Command
-      shell: bash
-      run: eval "${{ inputs.run_command }}"
-
-    - name: Disconnect VPN
-      if: always()
-      shell: bash
-      run: |
-        echo "d myvpn" | sudo tee /var/run/xl2tpd/l2tp-control
-        sudo ipsec down myvpn
-        echo "VPN disconnected!"
-
 inputs:
   vpn_gateway:
     required: true
@@ -116,8 +104,6 @@ inputs:
   vpn_ike:
     required: true
   vpn_esp:
-    required: true
-  run_command:
     required: true
 outputs:
   ppp_interface:
