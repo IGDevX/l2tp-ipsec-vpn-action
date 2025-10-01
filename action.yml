@@ -62,6 +62,7 @@ runs:
         sudo chmod 600 /etc/ppp/options.l2tpd.client
 
     - name: Start VPN
+      id: start_vpn
       shell: bash
       run: |
         sudo mkdir -p /var/run/xl2tpd
