@@ -1,0 +1,107 @@
+name: "VPN Wrapper Action"
+description: "Connects to VPN, runs commands, and disconnects automatically"
+author: "Alexandre-Roussel48"
+runs:
+  using: "composite"
+  steps:
+    - name: Install Required Packages
+      shell: bash
+      run: |
+        sudo apt update
+        sudo apt-get install -y strongswan xl2tpd net-tools dnsutils
+
+    - name: Add VPN Configuration
+      shell: bash
+      run: |
+        sudo bash -c 'cat > /etc/ipsec.conf <<EOF
+        conn myvpn
+          auto=add
+          keyexchange=ikev1
+          authby=secret
+          type=transport
+          left=%defaultroute
+          leftprotoport=17/1701
+          rightprotoport=17/1701
+          right=${{ inputs.vpn_gateway }}
+          ike=3des-sha1-modp1024
+          esp=3des-sha1
+        EOF'
+
+        sudo bash -c 'cat > /etc/ipsec.secrets <<EOF
+        : PSK "${{ inputs.vpn_psk }}"
+        EOF'
+
+        sudo chmod 600 /etc/ipsec.secrets
+
+        sudo bash -c 'cat > /etc/xl2tpd/xl2tpd.conf <<EOF
+        [lac myvpn]
+        lns = ${{ inputs.vpn_gateway }}
+        ppp debug = yes
+        pppoptfile = /etc/ppp/options.l2tpd.client
+        length bit = yes
+        EOF'
+
+        sudo bash -c 'cat > /etc/ppp/options.l2tpd.client <<EOF
+        ipcp-accept-local
+        ipcp-accept-remote
+        refuse-eap
+        require-chap
+        noccp
+        noauth
+        mtu 1280
+        mru 1280
+        noipdefault
+        defaultroute
+        usepeerdns
+        connect-delay 5000
+        domain "${{ inputs.vpn_nt_domain }}"
+        name "${{ inputs.vpn_username }}"
+        password "${{ inputs.vpn_password }}"
+        EOF'
+
+        sudo chmod 600 /etc/ppp/options.l2tpd.client
+
+    - name: Start VPN
+      shell: bash
+      run: |
+        sudo mkdir -p /var/run/xl2tpd
+        sudo touch /var/run/xl2tpd/l2tp-control
+        sudo service ipsec restart
+        sudo service xl2tpd restart
+        sudo ipsec up myvpn
+        echo "c myvpn" | sudo tee /var/run/xl2tpd/l2tp-control
+
+        while ! ip addr show ppp0 | grep -q "inet "; do
+            echo "Waiting for ppp0 to be up..."
+            sleep 1
+        done
+        echo "ppp0 is up!"
+        sudo ip route replace default dev ppp0
+        echo "All traffic routed through VPN (ppp0)"
+
+    - name: Run Caller Command
+      shell: bash
+      run: eval "${{ inputs.run_command }}"
+
+    - name: Disconnect VPN
+      if: always()
+      shell: bash
+      run: |
+        echo "d myvpn" | sudo tee /var/run/xl2tpd/l2tp-control
+        sudo ipsec down myvpn
+        echo "VPN disconnected!"
+
+inputs:
+  vpn_gateway:
+    required: true
+  vpn_psk:
+    required: true
+  vpn_username:
+    required: true
+  vpn_password:
+    required: true
+  vpn_nt_domain:
+    required: true
+  run_command:
+    required: true
+
