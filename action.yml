@@ -45,7 +45,7 @@ runs:
         ipcp-accept-local
         ipcp-accept-remote
         refuse-eap
-        require-chap
+        require-mschap-v2
         noccp
         noauth
         mtu 1280
@@ -72,7 +72,7 @@ runs:
         echo "c myvpn" | sudo tee /var/run/xl2tpd/l2tp-control
 
         echo "Waiting for ppp0 interface..."
-        TIMEOUT=30   # seconds
+        TIMEOUT=90   # seconds
         COUNT=0
         until ip addr show ppp0 2>/dev/null | grep -q "inet "; do
           if [ $COUNT -ge $TIMEOUT ]; then
