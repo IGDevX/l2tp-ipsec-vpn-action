@@ -71,9 +71,17 @@ runs:
         sudo ipsec up myvpn
         echo "c myvpn" | sudo tee /var/run/xl2tpd/l2tp-control
 
-        while ! ip addr show ppp0 | grep -q "inet "; do
-            echo "Waiting for ppp0 to be up..."
-            sleep 1
+        echo "Waiting for ppp0 interface..."
+        TIMEOUT=30   # seconds
+        COUNT=0
+        until ip addr show ppp0 2>/dev/null | grep -q "inet "; do
+          if [ $COUNT -ge $TIMEOUT ]; then
+            echo "Timeout: ppp0 did not come up after $TIMEOUT seconds"
+            exit 1
+          fi
+          echo "Waiting for ppp0 to be up... ($COUNT/$TIMEOUT)"
+          sleep 1
+          COUNT=$((COUNT+1))
         done
         echo "ppp0 is up!"
         sudo ip route replace default dev ppp0
