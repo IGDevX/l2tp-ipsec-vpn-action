@@ -1,5 +1,5 @@
-name: "VPN Wrapper Action"
-description: "Connects to VPN, runs commands, and disconnects automatically"
+name: "VPN Connect"
+description: "Brings up a VPN (IPSec + L2TP) and exposes ppp0 interface"
 author: "Alexandre-Roussel48"
 runs:
   using: "composite"
@@ -23,8 +23,8 @@ runs:
           leftprotoport=17/1701
           rightprotoport=17/1701
           right=${{ inputs.vpn_gateway }}
-          ike=3des-sha1-modp1024
-          esp=3des-sha1
+          ike=${{ inputs.vpn_ike }}
+          esp=${{ inputs.vpn_esp }}
         EOF'
 
         sudo bash -c 'cat > /etc/ipsec.secrets <<EOF
@@ -77,17 +77,17 @@ runs:
         until ip addr show ppp0 2>/dev/null | grep -q "inet "; do
           if [ $COUNT -ge $TIMEOUT ]; then
             echo "Timeout: ppp0 did not come up after $TIMEOUT seconds"
-            echo "🔹 Dumping syslog for debugging..."
-            sudo tail -n 50 /var/log/syslog
             exit 1
           fi
           echo "Waiting for ppp0 to be up... ($COUNT/$TIMEOUT)"
           sleep 1
           COUNT=$((COUNT+1))
         done
-        echo "ppp0 is up!"
-        sudo ip route replace default dev ppp0
-        echo "All traffic routed through VPN (ppp0)"
+
+        PPP_IP=$(ip -4 addr show ppp0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
+        echo "ppp0 is up with IP $PPP_IP"
+        echo "ppp_interface=ppp0" >> $GITHUB_OUTPUT
+        echo "ppp_ip=$PPP_IP" >> $GITHUB_OUTPUT
 
     - name: Run Caller Command
       shell: bash
@@ -112,6 +112,16 @@ inputs:
     required: true
   vpn_nt_domain:
     required: true
+  vpn_ike:
+    required: true
+  vpn_esp:
+    required: true
   run_command:
     required: true
-
+outputs:
+  ppp_interface:
+    description: "The VPN interface name"
+    value: ${{ steps.start_vpn.outputs.ppp_interface }}
+  ppp_ip:
+    description: "The VPN interface IP address"
+    value: ${{ steps.start_vpn.outputs.ppp_ip }}
