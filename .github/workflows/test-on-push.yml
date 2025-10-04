@@ -1,0 +1,30 @@
+name: Test VPN Action on Push
+on:
+  push:
+    branches:
+      - main
+      - 'feature/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run VPN Action
+        id: start_vpn
+        uses: ./  # uses the local action
+        with:
+          vpn_gateway: ${{ secrets.VPN_GATEWAY }}
+          vpn_psk: ${{ secrets.VPN_PSK }}
+          vpn_username: ${{ secrets.VPN_USERNAME }}
+          vpn_password: ${{ secrets.VPN_PASSWORD }}
+          vpn_nt_domain: ${{ secrets.VPN_NT_DOMAIN }}
+          vpn_ike: ${{ secrets.VPN_IKE }}
+          vpn_esp: ${{ secrets.VPN_ESP }}
+
+      - name: Check PPP interface
+        run: |
+          echo "PPP interface: ${{ steps.start_vpn.outputs.ppp_interface }}"
+          echo "PPP IP: ${{ steps.start_vpn.outputs.ppp_ip }}"
