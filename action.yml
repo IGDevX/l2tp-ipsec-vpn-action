@@ -1,19 +1,39 @@
-name: "VPN Connect"
-description: "Brings up a VPN (IPSec + L2TP) and exposes ppp0 interface"
+name: "L2TP/IPSec VPN Connect"
+description: "Brings up a VPN (IPSec + L2TP) and exposes the PPP interface"
 author: "Alexandre-Roussel48"
+branding:
+  icon: "lock"
+  color: "blue"
+
 runs:
   using: "composite"
   steps:
+    # -----------------------------
+    # 1. Mask secrets early
+    # -----------------------------
+    - name: Mask sensitive values
+      shell: bash
+      run: |
+        echo "::add-mask::${{ inputs.vpn_password }}"
+        echo "::add-mask::${{ inputs.vpn_psk }}"
+
+    # -----------------------------
+    # 2. Install dependencies
+    # -----------------------------
     - name: Install Required Packages
       shell: bash
       run: |
-        sudo apt update
+        sudo apt-get update
         sudo apt-get install -y strongswan xl2tpd net-tools dnsutils
 
-    - name: Add VPN Configuration
+    # -----------------------------
+    # 3. Add VPN configuration
+    # -----------------------------
+    - name: Configure IPSec
       shell: bash
       run: |
-        sudo bash -c 'cat > /etc/ipsec.conf <<EOF
+        # ipsec.conf
+        sudo tee /etc/ipsec.conf > /dev/null <<EOF
         conn myvpn
           auto=add
           keyexchange=ikev1
@@ -25,23 +45,29 @@ runs:
           right=${{ inputs.vpn_gateway }}
           ike=${{ inputs.vpn_ike }}
           esp=${{ inputs.vpn_esp }}
-        EOF'
+        EOF
 
-        sudo bash -c 'cat > /etc/ipsec.secrets <<EOF
+        # ipsec.secrets
+        sudo tee /etc/ipsec.secrets > /dev/null <<EOF
         : PSK "${{ inputs.vpn_psk }}"
-        EOF'
-
+        EOF
         sudo chmod 600 /etc/ipsec.secrets
 
-        sudo bash -c 'cat > /etc/xl2tpd/xl2tpd.conf <<EOF
+    - name: Configure L2TP
+      shell: bash
+      run: |
+
+        # xl2tpd.conf
+        sudo tee /etc/xl2tpd/xl2tpd.conf > /dev/null <<EOF
         [lac myvpn]
         lns = ${{ inputs.vpn_gateway }}
-        ppp debug = yes
+        ppp debug = no
         pppoptfile = /etc/ppp/options.l2tpd.client
         length bit = yes
-        EOF'
+        EOF
 
-        sudo bash -c 'cat > /etc/ppp/options.l2tpd.client <<EOF
+        # options.l2tpd.client
+        sudo tee /etc/ppp/options.l2tpd.client > /dev/null <<EOF
         ipcp-accept-local
         ipcp-accept-remote
         refuse-eap
@@ -57,39 +83,48 @@ runs:
         domain "${{ inputs.vpn_nt_domain }}"
         name "${{ inputs.vpn_username }}"
         password "${{ inputs.vpn_password }}"
-        EOF'
-
+        EOF
         sudo chmod 600 /etc/ppp/options.l2tpd.client
 
+    # -----------------------------
+    # 4. Start VPN and detect interface
+    # -----------------------------
     - name: Start VPN
       id: start_vpn
       shell: bash
       run: |
-        sudo mkdir -p /var/run/xl2tpd
-        sudo touch /var/run/xl2tpd/l2tp-control
-        sudo service ipsec restart
-        sudo service xl2tpd restart
+        # Start services
+        sudo systemctl restart strongswan || sudo service ipsec restart
+        sudo systemctl restart xl2tpd || sudo service xl2tpd restart
         sudo ipsec up myvpn
         echo "c myvpn" | sudo tee /var/run/xl2tpd/l2tp-control
 
-        echo "Waiting for ppp0 interface..."
-        TIMEOUT=90   # seconds
+        # Wait for PPP interface
+        TIMEOUT=90
         COUNT=0
-        until ip addr show ppp0 2>/dev/null | grep -q "inet "; do
+        until ip link show | grep -q "ppp"; do
           if [ $COUNT -ge $TIMEOUT ]; then
-            echo "Timeout: ppp0 did not come up after $TIMEOUT seconds"
+            echo "Timeout: PPP interface did not appear after $TIMEOUT seconds"
             exit 1
           fi
-          echo "Waiting for ppp0 to be up... ($COUNT/$TIMEOUT)"
+          echo "Waiting for PPP interface... ($COUNT/$TIMEOUT)"
           sleep 1
           COUNT=$((COUNT+1))
         done
 
-        PPP_IP=$(ip -4 addr show ppp0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
-        echo "ppp0 is up with IP $PPP_IP"
-        echo "ppp_interface=ppp0" >> $GITHUB_OUTPUT
+        # Detect actual PPP interface dynamically
+        PPP_IFACE=$(ip -o link show | awk -F': ' '/ppp/ {print $2; exit}')
+        PPP_IP=$(ip -4 addr show $PPP_IFACE | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
+
+        echo "PPP interface: $PPP_IFACE"
+        echo "PPP IP: $PPP_IP"
+
+        echo "ppp_interface=$PPP_IFACE" >> $GITHUB_OUTPUT
         echo "ppp_ip=$PPP_IP" >> $GITHUB_OUTPUT
 
+# -----------------------------
+# Inputs
+# -----------------------------
 inputs:
   vpn_gateway:
     required: true
@@ -105,9 +140,13 @@ inputs:
     required: true
   vpn_esp:
     required: true
+
+# -----------------------------
+# Outputs
+# -----------------------------
 outputs:
   ppp_interface:
-    description: "The VPN interface name"
+    description: "The detected VPN interface name"
     value: ${{ steps.start_vpn.outputs.ppp_interface }}
   ppp_ip:
     description: "The VPN interface IP address"
