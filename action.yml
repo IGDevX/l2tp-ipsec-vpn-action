@@ -93,6 +93,10 @@ runs:
       id: start_vpn
       shell: bash
       run: |
+        # Ensure control socket exists before restarting services
+        sudo mkdir -p /var/run/xl2tpd
+        sudo touch /var/run/xl2tpd/l2tp-control
+
         # Start services
         sudo service ipsec restart
         sudo service xl2tpd restart
@@ -103,19 +107,14 @@ runs:
         # Wait for PPP interface
         TIMEOUT=90
         COUNT=0
-        until ip link show | grep -q "ppp"; do
-          if [ $COUNT -ge $TIMEOUT ]; then
-            echo "Timeout: PPP interface did not appear after $TIMEOUT seconds"
-            exit 1
-          fi
+        until PPP_IFACE=$(ip -o link show | awk -F': ' '/ppp/ {print $2; exit}') \
+          && PPP_IP=$(ip -4 addr show "$PPP_IFACE" 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}') \
+          && [ -n "$PPP_IP" ]; do
+          [ $COUNT -ge $TIMEOUT ] && { echo "Timeout: PPP interface did not come up after $TIMEOUT seconds"; exit 1; }
           echo "Waiting for PPP interface... ($COUNT/$TIMEOUT)"
           sleep 1
           COUNT=$((COUNT+1))
         done
-
-        # Detect actual PPP interface dynamically
-        PPP_IFACE=$(ip -o link show | awk -F': ' '/ppp/ {print $2; exit}')
-        PPP_IP=$(ip -4 addr show $PPP_IFACE | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
 
         echo "PPP interface: $PPP_IFACE"
         echo "PPP IP: $PPP_IP"
