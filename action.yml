@@ -94,8 +94,9 @@ runs:
       shell: bash
       run: |
         # Start services
-        sudo systemctl restart strongswan || sudo service ipsec restart
-        sudo systemctl restart xl2tpd || sudo service xl2tpd restart
+        sudo service ipsec restart
+        sudo service xl2tpd restart
+        
         sudo ipsec up myvpn
         echo "c myvpn" | sudo tee /var/run/xl2tpd/l2tp-control
 
