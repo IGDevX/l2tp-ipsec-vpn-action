@@ -1,6 +1,6 @@
-import { execFileSync } from "child_process";
-import { join } from "path";
-import * as core from "@actions/core";
+const { execFileSync } = require("child_process");
+const { join } = require("path");
+const core = require("@actions/core");
 
 try {
   const script = join(process.cwd(), "scripts/connect.sh");
@@ -20,3 +20,4 @@ try {
 } catch (err) {
   core.setFailed(err.message);
 }
+

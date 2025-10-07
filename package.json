@@ -1,0 +1,28 @@
+{
+  "name": "l2tp-ipsec-vpn-action",
+  "version": "1.0.0",
+  "description": "L2TP/IPSec VPN Connect ======================",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "ncc build src/main.js -o dist/main && ncc build src/post.js -o dist/post"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/IGDevX/vpn-actions.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/IGDevX/vpn-actions/issues"
+  },
+  "homepage": "https://github.com/IGDevX/vpn-actions#readme",
+  "dependencies": {
+    "@actions/core": "^1.11.1"
+  },
+  "devDependencies": {
+    "@vercel/ncc": "^0.38.4"
+  }
+}
